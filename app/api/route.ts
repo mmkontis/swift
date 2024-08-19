@@ -3,9 +3,11 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import { zfd } from "zod-form-data";
 import { NextRequest, NextResponse } from "next/server";
+import Groq from "groq-sdk";
+import { ReadableStream } from 'stream/web';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
+const groq = new Groq();
 const schema = zfd.formData({
 	input: z.union([zfd.text(), zfd.file()]),
 	message: zfd.repeatableOfType(
@@ -48,18 +50,10 @@ export async function POST(request: NextRequest) {
 			messages: [
 				{
 					role: "system",
-					content: `- You are Swift, a friendly and helpful voice assistant.
-				- Respond briefly to the user's request, and do not provide unnecessary information.
-				- If you don't understand the user's request, ask for clarification.
-				- You do not have access to up-to-date information, so you should not provide real-time data.
-				- You are not capable of performing actions other than responding to the user.
-				- Do not use markdown, emojis, or other formatting in your responses. Respond in a way easily spoken by text-to-speech software.
-				- User location is ${location()}.
-				- The current time is ${time()}.
-				- Your large language model is GPT-4, created by OpenAI.
-				- Your text-to-speech is powered by Eleven Labs.
-				- You are built with Next.js and hosted on Vercel.
-				- Respond in ${data.language === "en" ? "English" : "Greek"}.`,
+					content: `- You are Bobby, a horny and naughty gay daddy and you are truying to persuave user get laid with you, using slurs and slugs.
+                -You soeak with the diriest ever words, alsways very raw and sexy horny elvel99999 User location is ${location()}.
+                - The current time is ${time()}.
+                - Respond in ${data.language === "en" ? "English" : "Greek"}.`,
 				},
 				...data.message,
 				{
@@ -80,24 +74,33 @@ export async function POST(request: NextRequest) {
 		const speechSynthesisStart = Date.now();
 		console.time(`eleven-labs-request-${requestId}`);
 
-		const audioData = await generateSpeech(response, data.language);
+		const audioStream = await generateSpeech(response, data.language);
 
 		console.timeEnd(`eleven-labs-request-${requestId}`);
 		latencies.speechSynthesis = Date.now() - speechSynthesisStart;
 
-		if (!audioData) {
-			console.error("Eleven Labs API Error: No audio data generated");
-			return NextResponse.json({ error: "Voice synthesis failed" }, { status: 500 });
-		}
-
 		console.time(`stream-${requestId}`);
 
-		const audioResponse = new NextResponse(audioData, {
+		// Create a new ReadableStream that we can use to pipe the audio data
+		const stream = new ReadableStream({
+			async start(controller) {
+				const reader = audioStream.getReader();
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					controller.enqueue(value);
+				}
+				controller.close();
+			},
+		});
+
+		const audioResponse = new NextResponse(stream, {
 			headers: {
-				"Content-Type": "audio/mpeg",
-				"X-Transcript": encodeURIComponent(transcript),
-				"X-Response": encodeURIComponent(response),
-				"X-Latencies": encodeURIComponent(JSON.stringify(latencies)),
+				'Content-Type': 'audio/mpeg',
+				'Transfer-Encoding': 'chunked',
+				'X-Transcript': encodeURIComponent(transcript),
+				'X-Response': encodeURIComponent(response),
+				'X-Latencies': encodeURIComponent(JSON.stringify(latencies)),
 			},
 		});
 
@@ -128,28 +131,27 @@ function time() {
 	});
 }
 
-async function getTranscript(input: string | File, language: string) {
+async function getTranscript(input: string | File) {
 	if (typeof input === "string") return input;
 
 	try {
-		const transcription = await openai.audio.transcriptions.create({
+		const { text } = await groq.audio.transcriptions.create({
 			file: input,
-			model: "whisper-1",
-			language: language === "el" ? "el" : "en",
+			model: "whisper-large-v3",
 		});
 
-		return transcription.text.trim() || null;
+		return text.trim() || null;
 	} catch (error) {
 		console.error("Transcription error:", error);
-		return null;
+		return null; // Empty audio file or error
 	}
 }
 
-async function generateSpeech(inputText: string, language: string): Promise<ArrayBuffer | null> {
+async function generateSpeech(inputText: string, language: string): Promise<ReadableStream<Uint8Array>> {
 	const apiKey = process.env.ELEVEN_LABS_API_KEY;
-	const voiceId = language === "el" ? "AZnzlk1XvdvUeBnXmlld" : "21m00Tcm4TlvDq8ikWAM"; // Greek: Elli, English: Rachel
+	const voiceId = language === "el" ? "AZnzlk1XvdvUeBnXmlld" : "YXpFCvM1S3JbWEJhoskW"; // Greek: Elli, English: Rachel
 	const modelId = "eleven_multilingual_v2";
-	const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+	const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`;
 
 	try {
 		const response = await fetch(url, {
@@ -166,6 +168,7 @@ async function generateSpeech(inputText: string, language: string): Promise<Arra
 					stability: 0.5,
 					similarity_boost: 0.75,
 				},
+				output_format: "mp3_44100_128",
 			}),
 		});
 
@@ -173,9 +176,13 @@ async function generateSpeech(inputText: string, language: string): Promise<Arra
 			throw new Error(`Eleven Labs API error: ${response.status} ${response.statusText}`);
 		}
 
-		return await response.arrayBuffer();
+		if (!response.body) {
+			throw new Error('Response body is null');
+		}
+
+		return response.body;
 	} catch (error) {
 		console.error("Eleven Labs API error:", error);
-		return null;
+		throw error;
 	}
 }

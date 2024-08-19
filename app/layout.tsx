@@ -24,10 +24,10 @@ export default function RootLayout({
 				className={clsx(
 					GeistSans.variable,
 					GeistMono.variable,
-					"py-8 px-6 lg:p-10 text-black dark:text-white bg-white dark:bg-black min-h-dvh flex flex-col justify-between antialiased font-sans select-none"
+					"py-8 px-6 lg:p-10 dark:ext-black text-white dark:bg-white bg-black min-h-dvh flex flex-col justify-between antialiased font-sans select-none"
 				)}
 			>
-				<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+				<ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
 					<main className="flex flex-col items-center justify-center grow">
 						{children}
 					</main>

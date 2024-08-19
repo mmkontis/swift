@@ -8,7 +8,8 @@ import { usePlayer } from "@/lib/usePlayer";
 import { track } from "@vercel/analytics";
 import { useMicVAD, utils } from "@ricky0123/vad-react";
 import { useTheme } from "next-themes";
-import { SunIcon, MoonIcon, LanguageIcon, MicrophoneIcon } from "@heroicons/react/24/solid";
+import { SunIcon, MoonIcon, LanguageIcon } from "@heroicons/react/24/solid";
+import { Mic, MicOff } from "react-feather";
 
 type Message = {
 	role: "user" | "assistant";
@@ -28,6 +29,7 @@ export default function Home() {
 	const { theme, setTheme } = useTheme();
 	const [language, setLanguage] = useState("en");
 	const [isMuted, setIsMuted] = useState(false);
+	const [streamedText, setStreamedText] = useState("");
 
 	const vad = useMicVAD({
 		startOnLoad: true,
@@ -123,6 +125,19 @@ export default function Home() {
 		const audioBlob = await response.blob();
 		const audioUrl = URL.createObjectURL(audioBlob);
 		const audio = new Audio(audioUrl);
+
+		// Simulate streaming effect
+		setStreamedText("");
+		let currentIndex = 0;
+		const streamInterval = setInterval(() => {
+			if (currentIndex <= text.length) {
+				setStreamedText(text.slice(0, currentIndex));
+				currentIndex++;
+			} else {
+				clearInterval(streamInterval);
+			}
+		}, 50); // Adjust this value to change the streaming speed (higher value = slower)
+
 		audio.play();
 
 		const endTime = Date.now();
@@ -152,22 +167,6 @@ export default function Home() {
 		submit(input);
 	}
 
-	async function testElevenLabsTTS() {
-		try {
-			const response = await fetch("/api/test-tts");
-			if (!response.ok) {
-				throw new Error("Failed to generate speech");
-			}
-			const audioBlob = await response.blob();
-			const audioUrl = URL.createObjectURL(audioBlob);
-			const audio = new Audio(audioUrl);
-			audio.play();
-		} catch (error) {
-			console.error("Error testing Eleven Labs TTS:", error);
-			toast.error("Failed to test Eleven Labs TTS");
-		}
-	}
-
 	function toggleMute() {
 		setIsMuted(!isMuted);
 		if (!isMuted) {
@@ -182,76 +181,74 @@ export default function Home() {
 			<div className="absolute top-4 right-4 flex space-x-2">
 				<button
 					onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-					className="p-2 rounded-full bg-gray-200 dark:bg-gray-800"
+					className="p-2 rounded-full dark:bg-gray-800 bg-gray-200"
 				>
-					{theme === "dark" ? (
-						<SunIcon className="w-6 h-6" />
-					) : (
+					{theme === "light" ? (
 						<MoonIcon className="w-6 h-6" />
+					) : (
+						<SunIcon className="w-6 h-6" />
 					)}
 				</button>
 				<button
 					onClick={() => setLanguage(language === "en" ? "el" : "en")}
-					className="p-2 rounded-full bg-gray-200 dark:bg-gray-800"
+					className="p-2 rounded-full dark:bg-gray-800 bg-gray-200"
 				>
 					<LanguageIcon className="w-6 h-6" />
 					<span className="ml-1">{language.toUpperCase()}</span>
 				</button>
 			</div>
 
-			<div className="pb-4 min-h-28" />
+			<div className="flex flex-col items-center justify-center min-h-screen px-4">
+				<div className="w-full max-w-4xl mb-8">
+					<h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-center mb-4 dark:text-white">
+						{streamedText || "Ask me anything"}
+					</h1>
+				</div>
 
-			<form
-				className="rounded-full bg-neutral-200/80 dark:bg-neutral-800/80 flex items-center w-full max-w-3xl border border-transparent hover:border-neutral-300 focus-within:border-neutral-400 hover:focus-within:border-neutral-400 dark:hover:border-neutral-700 dark:focus-within:border-neutral-600 dark:hover:focus-within:border-neutral-600"
-				onSubmit={handleFormSubmit}
-			>
-				<input
-					type="text"
-					className="bg-transparent focus:outline-none p-4 w-full placeholder:text-neutral-600 dark:placeholder:text-neutral-400"
-					required
-					placeholder="Ask me anything"
-					value={input}
-					onChange={(e) => setInput(e.target.value)}
-					ref={inputRef}
-				/>
-
-				<button
-					type="button"
-					onClick={toggleMute}
-					className={`p-4 rounded-full ${
-						isMuted ? "text-red-500" : "text-neutral-700 dark:text-neutral-300"
-					} hover:bg-neutral-300 dark:hover:bg-neutral-700`}
+				<form
+					className="rounded-full dark:bg-neutral-800/80 bg-neutral-200/80 flex items-center w-full max-w-3xl border border-transparent dark:hover:border-neutral-700 dark:focus-within:border-neutral-600 dark:hover:focus-within:border-neutral-600 hover:border-neutral-300 focus-within:border-neutral-400 hover:focus-within:border-neutral-400"
+					onSubmit={handleFormSubmit}
 				>
-					<MicrophoneIcon className="w-6 h-6" />
-				</button>
+					<input
+						type="text"
+						className="bg-transparent focus:outline-none p-4 w-full dark:placeholder:text-neutral-400 placeholder:text-neutral-600"
+						required
+						placeholder="Type your question here"
+						value={input}
+						onChange={(e) => setInput(e.target.value)}
+						ref={inputRef}
+					/>
 
-				<button
-					type="submit"
-					className="p-4 text-neutral-700 hover:text-black dark:text-neutral-300 dark:hover:text-white"
-					disabled={isPending}
-					aria-label="Submit"
-				>
-					{isPending ? <LoadingIcon /> : <EnterIcon />}
-				</button>
-			</form>
+					<button
+						type="button"
+						onClick={toggleMute}
+						className={`p-4 rounded-full ${isMuted ? "text-red-500" : "dark:text-neutral-300 text-neutral-700"
+							} dark:hover:bg-neutral-700 hover:bg-neutral-300`}
+					>
+						{isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+					</button>
 
-			<div className="text-neutral-400 dark:text-neutral-600 pt-4 text-center max-w-xl text-balance min-h-28 space-y-4">
-				{messages.length > 0 && (
-					<>
-						<p>{messages.at(-1)?.content}</p>
-						{messages.at(-1)?.latencies && (
-							<div className="text-xs font-mono text-neutral-300 dark:text-neutral-700">
-								<p>Transcription: {messages.at(-1)?.latencies?.transcription}ms</p>
-								<p>Text Completion: {messages.at(-1)?.latencies?.textCompletion}ms</p>
-								<p>Speech Synthesis: {messages.at(-1)?.latencies?.speechSynthesis}ms</p>
-								<p>Total Latency: {messages.at(-1)?.latencies?.total}ms</p>
-							</div>
-						)}
-					</>
+					<button
+						type="submit"
+						className="p-4 dark:text-neutral-300 dark:hover:text-white text-neutral-700 hover:text-black"
+						disabled={isPending}
+						aria-label="Submit"
+					>
+						{isPending ? <LoadingIcon /> : <EnterIcon />}
+					</button>
+				</form>
+
+				{messages.length > 0 && messages.at(-1)?.latencies && (
+					<div className="text-xs font-mono dark:text-neutral-300 text-neutral-700 mt-4">
+						<p>Transcription: {messages.at(-1)?.latencies?.transcription}ms</p>
+						<p>Text Completion: {messages.at(-1)?.latencies?.textCompletion}ms</p>
+						<p>Speech Synthesis: {messages.at(-1)?.latencies?.speechSynthesis}ms</p>
+						<p>Total Latency: {messages.at(-1)?.latencies?.total}ms</p>
+					</div>
 				)}
 
 				{messages.length === 0 && (
-					<>
+					<div className="text-center mt-8 dark:text-neutral-400 text-neutral-600">
 						<p>
 							A fast, open-source voice assistant powered by{" "}
 							<A href="https://openai.com">OpenAI</A>,{" "}
@@ -274,20 +271,13 @@ export default function Home() {
 						) : (
 							<p>Start talking to chat.</p>
 						)}
-					</>
+					</div>
 				)}
-
-				<button
-					onClick={testElevenLabsTTS}
-					className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-				>
-					Test Eleven Labs TTS
-				</button>
 			</div>
 
 			<div
 				className={clsx(
-					"absolute size-36 blur-3xl rounded-full bg-gradient-to-b from-red-200 to-red-400 dark:from-red-600 dark:to-red-800 -z-50 transition ease-in-out",
+					"absolute size-36 blur-3xl rounded-full bg-gradient-to-b dark:from-red-600 dark:to-red-800 from-red-200 to-red-400 -z-50 transition ease-in-out",
 					{
 						"opacity-0": vad.loading || vad.errored || isMuted,
 						"opacity-30":
@@ -304,7 +294,7 @@ function A(props: any) {
 	return (
 		<a
 			{...props}
-			className="text-neutral-500 dark:text-neutral-500 hover:underline font-medium"
+			className="dark:text-neutral-500 text-neutral-500 hover:underline font-medium"
 		/>
 	);
 }
